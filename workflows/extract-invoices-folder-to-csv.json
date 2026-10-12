@@ -1,0 +1,192 @@
+{
+  "name": "ParserBee: extract invoices in a folder to CSV",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Extract invoices in a folder to CSV\n\n1. Set the folder path in **Read invoice files**.\n2. Create a **Header Auth** credential named *ParserBee API key*: name `x-api-key`, value your API key from ParserBee Settings.\n3. Paste your Parser Template ID in **ParserBee: extract data**.\n4. Click **Test workflow**. The CSV is written to the path in **Save CSV**.\n\nEach page costs 1 ParserBee page credit.",
+        "height": 280,
+        "width": 460
+      },
+      "id": "3e9bd3a7-229a-5bfa-8067-29adf15fed95",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3263fff6-a348-57c9-9c0f-29b70c4d86ef",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/invoices/*.pdf",
+        "options": {}
+      },
+      "id": "ec3020a4-e51b-5cb4-9882-948d361a07d8",
+      "name": "Read invoice files",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.parserbee.com/api/v1/extract",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "template_id",
+              "value": "PASTE_YOUR_TEMPLATE_ID"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b6587771-1719-5349-9dee-c6b8ced4ce7e",
+      "name": "ParserBee: extract data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "ParserBee API key"
+        }
+      },
+      "notes": "Paste your Parser Template ID into template_id. The API key comes from the 'ParserBee API key' Header Auth credential (name: x-api-key)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// One row per line item, with the invoice fields repeated on each row.\n// Works with any Parser Template: the first list of objects in the result is\n// treated as the line items; every plain field becomes a column.\nconst sourceNames = $('Read invoice files').all().map(f => f.binary?.data?.fileName);\nconst rows = [];\n\n$input.all().forEach((item, i) => {\n  const data = item.json.data || {};\n  const header = { source_file: sourceNames[i] ?? '' };\n  let lines = [];\n  for (const [key, value] of Object.entries(data)) {\n    if (Array.isArray(value) && value.length && typeof value[0] === 'object') {\n      if (!lines.length) lines = value;\n    } else if (value === null || typeof value !== 'object') {\n      header[key] = value;\n    }\n  }\n  header.request_id = item.json.request_id;\n\n  if (!lines.length) {\n    rows.push({ json: header });\n    return;\n  }\n  for (const line of lines) {\n    const row = { ...header };\n    for (const [key, value] of Object.entries(line)) row[`line_${key}`] = value;\n    rows.push({ json: row });\n  }\n});\n\nreturn rows;\n"
+      },
+      "id": "0cf6d515-9038-5b7f-802e-38da6468c544",
+      "name": "One row per line item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "fileName": "invoices.csv"
+        }
+      },
+      "id": "3c3b0788-4ebd-5a57-8fc9-3f0f79d0b50d",
+      "name": "Make CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/data/invoices.csv",
+        "options": {}
+      },
+      "id": "9f29a7ef-538b-528f-9fa3-3d40afe623cc",
+      "name": "Save CSV",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read invoice files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read invoice files": {
+      "main": [
+        [
+          {
+            "node": "ParserBee: extract data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParserBee: extract data": {
+      "main": [
+        [
+          {
+            "node": "One row per line item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per line item": {
+      "main": [
+        [
+          {
+            "node": "Make CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make CSV": {
+      "main": [
+        [
+          {
+            "node": "Save CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
