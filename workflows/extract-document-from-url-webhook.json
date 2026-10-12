@@ -1,0 +1,110 @@
+{
+  "name": "ParserBee: extract a document from a URL (webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Extract a document from a URL with a webhook\n\nPOST a JSON body with `file_url` (a public link to a PDF or image) to this webhook, and get the extracted data back.\n\n```\ncurl -X POST <webhook URL> \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"file_url\": \"https://example.com/invoice.pdf\"}'\n```\n\nSet the credential and the Parser Template ID in **ParserBee: extract from URL**.",
+        "height": 300,
+        "width": 460
+      },
+      "id": "ffeb5fe8-1acf-552b-bdb7-07552c8fbe00",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "parserbee-extract",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0cfbea0a-fdaf-54c5-bb26-2db500ffc5b1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        100
+      ],
+      "webhookId": "da8ddd97-cb4e-55ab-9b98-32cff93d8a54"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.parserbee.com/api/v1/extract",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ template_id: 'PASTE_YOUR_TEMPLATE_ID', file_url: $json.body.file_url }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "79aa6825-c687-5248-ba0b-9186401943ff",
+      "name": "ParserBee: extract from URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "ParserBee API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.data) }}",
+        "options": {}
+      },
+      "id": "4e7801a5-c769-55e8-9398-8dc536abadbf",
+      "name": "Return the data",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "ParserBee: extract from URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParserBee: extract from URL": {
+      "main": [
+        [
+          {
+            "node": "Return the data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
