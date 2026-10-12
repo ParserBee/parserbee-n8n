@@ -1,0 +1,224 @@
+{
+  "name": "ParserBee: Google Drive invoices to Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Google Drive invoices to Google Sheets\n\nEvery new PDF or image in a Drive folder is sent to ParserBee, and the extracted invoice lines are added to a Google Sheet.\n\n1. Pick the folder in **New file in folder**.\n2. Create a **Header Auth** credential named *ParserBee API key*: name `x-api-key`, value your API key.\n3. Paste your Parser Template ID in **ParserBee: extract data**.\n4. Pick the spreadsheet in **Add rows to sheet**, then activate the workflow.",
+        "height": 300,
+        "width": 480
+      },
+      "id": "65057030-fec9-5f33-bf38-bd8b93b8d15b",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": ""
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "14c58acf-199b-592e-85d7-4faa512bc851",
+      "name": "New file in folder",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        100
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "2f27ef99-bc94-5b94-87c3-240847a386ad",
+      "name": "Download file",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        220,
+        100
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.parserbee.com/api/v1/extract",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "template_id",
+              "value": "PASTE_YOUR_TEMPLATE_ID"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "9e797540-f7c1-55f8-8e25-0827317c2c98",
+      "name": "ParserBee: extract data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "ParserBee API key"
+        }
+      },
+      "notes": "Paste your Parser Template ID into template_id. The API key comes from the 'ParserBee API key' Header Auth credential (name: x-api-key)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// One row per line item, with the invoice fields repeated on each row.\n// Works with any Parser Template: the first list of objects in the result is\n// treated as the line items; every plain field becomes a column.\nconst sourceNames = $('New file in folder').all().map(f => f.json.name);\nconst rows = [];\n\n$input.all().forEach((item, i) => {\n  const data = item.json.data || {};\n  const header = { source_file: sourceNames[i] ?? '' };\n  let lines = [];\n  for (const [key, value] of Object.entries(data)) {\n    if (Array.isArray(value) && value.length && typeof value[0] === 'object') {\n      if (!lines.length) lines = value;\n    } else if (value === null || typeof value !== 'object') {\n      header[key] = value;\n    }\n  }\n  header.request_id = item.json.request_id;\n\n  if (!lines.length) {\n    rows.push({ json: header });\n    return;\n  }\n  for (const line of lines) {\n    const row = { ...header };\n    for (const [key, value] of Object.entries(line)) row[`line_${key}`] = value;\n    rows.push({ json: row });\n  }\n});\n\nreturn rows;\n"
+      },
+      "id": "76682d07-ea35-51c8-92c9-53ac38320da7",
+      "name": "One row per line item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": ""
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "7102ee38-31b5-5225-8e14-499aacb75aa0",
+      "name": "Add rows to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Pick your spreadsheet and sheet. Columns are matched by name; add a header row with the field names you want to keep."
+    }
+  ],
+  "connections": {
+    "New file in folder": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "ParserBee: extract data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParserBee: extract data": {
+      "main": [
+        [
+          {
+            "node": "One row per line item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per line item": {
+      "main": [
+        [
+          {
+            "node": "Add rows to sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
