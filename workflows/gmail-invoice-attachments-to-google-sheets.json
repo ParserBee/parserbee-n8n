@@ -1,0 +1,210 @@
+{
+  "name": "ParserBee: Gmail invoice attachments to Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Gmail invoice attachments to Google Sheets\n\nWhen an email with a PDF or image attachment arrives, each attachment is sent to ParserBee and the invoice lines are added to a Google Sheet.\n\n1. Adjust the search in **New email with attachment** (for example `to:invoices@yourcompany.com has:attachment`).\n2. Create a **Header Auth** credential named *ParserBee API key*: name `x-api-key`, value your API key.\n3. Paste your Parser Template ID in **ParserBee: extract data**.\n4. Pick the spreadsheet in **Add rows to sheet**, then activate the workflow.",
+        "height": 320,
+        "width": 500
+      },
+      "id": "b348c981-ce51-5226-9d57-1e1bdd665052",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "has:attachment (filename:pdf OR filename:jpg OR filename:png)"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "53248fb6-a706-5dd0-a3df-3394aa0492fc",
+      "name": "New email with attachment",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn each email into one item per PDF or image attachment, in the binary field \"data\".\nconst out = [];\nfor (const item of $input.all()) {\n  for (const [key, file] of Object.entries(item.binary ?? {})) {\n    const type = file.mimeType ?? '';\n    if (type === 'application/pdf' || type.startsWith('image/')) {\n      out.push({\n        json: { from: item.json.from?.text ?? '', subject: item.json.subject ?? '', file_name: file.fileName },\n        binary: { data: file },\n      });\n    }\n  }\n}\nreturn out;\n"
+      },
+      "id": "e0b73441-ed29-545c-9e79-66394d25e305",
+      "name": "One item per attachment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.parserbee.com/api/v1/extract",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "template_id",
+              "value": "PASTE_YOUR_TEMPLATE_ID"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "1222a250-7386-5511-a8dd-4077bf9fcba4",
+      "name": "ParserBee: extract data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "ParserBee API key"
+        }
+      },
+      "notes": "Paste your Parser Template ID into template_id. The API key comes from the 'ParserBee API key' Header Auth credential (name: x-api-key)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// One row per line item, with the invoice fields repeated on each row.\n// Works with any Parser Template: the first list of objects in the result is\n// treated as the line items; every plain field becomes a column.\nconst sourceNames = $('One item per attachment').all().map(f => f.json.file_name);\nconst rows = [];\n\n$input.all().forEach((item, i) => {\n  const data = item.json.data || {};\n  const header = { source_file: sourceNames[i] ?? '' };\n  let lines = [];\n  for (const [key, value] of Object.entries(data)) {\n    if (Array.isArray(value) && value.length && typeof value[0] === 'object') {\n      if (!lines.length) lines = value;\n    } else if (value === null || typeof value !== 'object') {\n      header[key] = value;\n    }\n  }\n  header.request_id = item.json.request_id;\n\n  if (!lines.length) {\n    rows.push({ json: header });\n    return;\n  }\n  for (const line of lines) {\n    const row = { ...header };\n    for (const [key, value] of Object.entries(line)) row[`line_${key}`] = value;\n    rows.push({ json: row });\n  }\n});\n\nreturn rows;\n"
+      },
+      "id": "4b3c606e-3a26-52c6-90e3-5d234e50f6ac",
+      "name": "One row per line item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": ""
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "a32a0777-8724-5e5b-bc69-25deb74b229a",
+      "name": "Add rows to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Pick your spreadsheet and sheet. Columns are matched by name; add a header row with the field names you want to keep."
+    }
+  ],
+  "connections": {
+    "New email with attachment": {
+      "main": [
+        [
+          {
+            "node": "One item per attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per attachment": {
+      "main": [
+        [
+          {
+            "node": "ParserBee: extract data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParserBee: extract data": {
+      "main": [
+        [
+          {
+            "node": "One row per line item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per line item": {
+      "main": [
+        [
+          {
+            "node": "Add rows to sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
